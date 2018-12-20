@@ -12,6 +12,8 @@ import android.view.View;
 import android.widget.TextView;
 import android.widget.Toast;
 
+import com.google.protobuf.InvalidProtocolBufferException;
+
 import java.io.BufferedInputStream;
 import java.io.BufferedReader;
 import java.io.ByteArrayOutputStream;
@@ -76,6 +78,7 @@ public class MainActivity extends AppCompatActivity {
         final TextInputLayout tw = findViewById(R.id.textInputLayout);
         final String ip = tw.getEditText().getText().toString();
 
+
         final Thread mthr = new Thread(new Runnable() {
             @Override
             public void run() {
@@ -83,7 +86,8 @@ public class MainActivity extends AppCompatActivity {
                     try {
                         mt.send(dss, ip, mt.makeProto());
                         //mt.recieveUDP();
-                        tw.setHint(mt.recieveUDP());
+                        mt.parseProto(mt.recieveUDP());
+
                     } catch (IOException e) {
                         e.printStackTrace();
                     }
@@ -93,7 +97,7 @@ public class MainActivity extends AppCompatActivity {
                         e.printStackTrace();
                     }
                 }
-                //axs.Builder
+
             }
         });
         mthr.setDaemon(true);
@@ -135,21 +139,41 @@ class myTask extends AsyncTask<Void, Void, Void> {
             e.printStackTrace();
         }
     }
-    public String recieveUDP(){
-        DatagramSocket rds = dss;
-        byte[] buf = new byte[2048];
+    public byte[] recieveUDP() throws IOException {
+        //DatagramSocket rds = dss;
+        byte[] buf = new byte[dss.getSendBufferSize()];
         DatagramPacket rdp = new DatagramPacket(buf, buf.length);
-        String txt = "fuck";
+      //  while (true) {
+
+                dss.receive(rdp);
+                Log.i("rdplength", String.valueOf(rdp.getLength()));
+                buf = new byte[rdp.getLength()];
+                DatagramPacket rdp2 = new DatagramPacket(buf, buf.length);
+                dss.receive(rdp2);
+                //rdp.setLength(buf.length);
+                byte[] data = rdp2.getData();
+
+
+                Log.i("datalength", String.valueOf(data.length));
+                Log.i("recieveddata", bytesToHex(data));
+                return data;
+
+            //Log.i("nl", String.valueOf(rdp2.getData().length));
+            //String txt = "fuck";
+            //return  data;
+        //}
+        //return  data;
+        /*byte[] data = rdp.getData();
 
             try {
                 rds.receive(rdp);
-                txt = "recieved";
-                Log.i("recieved", txt);
-               // rdp.setLength(txt.length());
+                //txt = "recieved";
+                Log.i("Data recieved", data.toString());
+
             } catch (IOException e) {
                 e.printStackTrace();
             }
-            return txt;
+            return data;*/
 
 
     }
@@ -170,7 +194,7 @@ class myTask extends AsyncTask<Void, Void, Void> {
         gocB.setSreq(srqB);
 
         GenericOuterClass.MREQ.Builder mmrqB = GenericOuterClass.MREQ.newBuilder();
-        mmrqB.setMd5A(0);
+        mmrqB.setMd5A(1);
         mmrqB.setMd5B(1);
         mmrqB.setMd5C(2);
         mmrqB.setMd5D(3);
@@ -184,7 +208,39 @@ class myTask extends AsyncTask<Void, Void, Void> {
 
     }
 
+
+    public void parseProto(byte[] incoming) throws InvalidProtocolBufferException {
+
+
+        Log.i("byte", bytesToHex(incoming));
+
+
+
+        GenericOuterClass.Generic input = GenericOuterClass.Generic.parseFrom(incoming);
+        int gotmid = input.getMid();
+        Log.i("MID", String.valueOf(gotmid));
+        GenericOuterClass.SREP statusReport = GenericOuterClass.SREP.parseFrom(input.toByteArray());
+
+        //statusReport.g
+        Log.i("gotready", String.valueOf(statusReport.getReady()) + String.valueOf(statusReport.getBusy()));
+
+
+    }
+
+
+
 }
+
+    private final static char[] hexArray = "0123456789ABCDEF".toCharArray();
+    public static String bytesToHex(byte[] bytes) {
+        char[] hexChars = new char[bytes.length * 2];
+        for ( int j = 0; j < bytes.length; j++ ) {
+            int v = bytes[j] & 0xFF;
+            hexChars[j * 2] = hexArray[v >>> 4];
+            hexChars[j * 2 + 1] = hexArray[v & 0x0F];
+        }
+        return new String(hexChars);
+    }
 public void setConnection(View view){
 
     dss =  mt.connect();
