@@ -46,6 +46,7 @@ public class MainActivity extends AppCompatActivity {
     private static BufferedReader br;
     private static PrintWriter pw;
     private static DatagramSocket ds;
+    int priority = 5;
     String message = "gui";
     private static String ip = "10.1.7.230";
     myTask mt = new myTask();
@@ -86,13 +87,19 @@ public class MainActivity extends AppCompatActivity {
                     try {
                         mt.send(dss, ip, mt.makeProto());
                         //mt.recieveUDP();
-                        mt.parseProto(mt.recieveUDP());
+                        switch (mt.parseProto(mt.recieveUDP())){
+                            case 1: Log.w("Connection", "Device is busy");
+                            priority = 1;
+                            break;
+                            case 2: mt.send(dss, ip, mt.makeCreq());
+                            mt.parseCrep(mt.recieveUDP());
+                        }
 
                     } catch (IOException e) {
                         e.printStackTrace();
                     }
                     try {
-                        Thread.sleep(3000);
+                        Thread.sleep(1000);
                     } catch (InterruptedException e) {
                         e.printStackTrace();
                     }
@@ -120,7 +127,7 @@ class myTask extends AsyncTask<Void, Void, Void> {
     public DatagramSocket connect(){
 
         try {
-            dss = new DatagramSocket(8009);
+            dss = new DatagramSocket(40050);
         } catch (SocketException e) {
             e.printStackTrace();
         }
@@ -131,7 +138,7 @@ class myTask extends AsyncTask<Void, Void, Void> {
 
 
         try {
-            DatagramPacket dp = new DatagramPacket(os, os.length, InetAddress.getByName(ip), 8009);
+            DatagramPacket dp = new DatagramPacket(os, os.length, InetAddress.getByName(ip), 40050);
             ds.send(dp);
         } catch (UnknownHostException e) {
             e.printStackTrace();
@@ -140,40 +147,25 @@ class myTask extends AsyncTask<Void, Void, Void> {
         }
     }
     public byte[] recieveUDP() throws IOException {
-        //DatagramSocket rds = dss;
+
         byte[] buf = new byte[dss.getSendBufferSize()];
         DatagramPacket rdp = new DatagramPacket(buf, buf.length);
-      //  while (true) {
+
 
                 dss.receive(rdp);
-                Log.i("rdplength", String.valueOf(rdp.getLength()));
-                buf = new byte[rdp.getLength()];
-                DatagramPacket rdp2 = new DatagramPacket(buf, buf.length);
-                dss.receive(rdp2);
-                //rdp.setLength(buf.length);
-                byte[] data = rdp2.getData();
+              //  Log.i("rdplength", String.valueOf(rdp.getLength()));
+
+                byte[] data = rdp.getData();
+                byte[] dataout = new byte [rdp.getLength()];
+                System.arraycopy(data, 0, dataout, 0, rdp.getLength());
 
 
-                Log.i("datalength", String.valueOf(data.length));
-                Log.i("recieveddata", bytesToHex(data));
-                return data;
+              //  Log.i("datalength", String.valueOf(data.length));
 
-            //Log.i("nl", String.valueOf(rdp2.getData().length));
-            //String txt = "fuck";
-            //return  data;
-        //}
-        //return  data;
-        /*byte[] data = rdp.getData();
+                return dataout;
 
-            try {
-                rds.receive(rdp);
-                //txt = "recieved";
-                Log.i("Data recieved", data.toString());
 
-            } catch (IOException e) {
-                e.printStackTrace();
-            }
-            return data;*/
+
 
 
     }
@@ -193,13 +185,7 @@ class myTask extends AsyncTask<Void, Void, Void> {
         srqB.clear();
         gocB.setSreq(srqB);
 
-        GenericOuterClass.MREQ.Builder mmrqB = GenericOuterClass.MREQ.newBuilder();
-        mmrqB.setMd5A(1);
-        mmrqB.setMd5B(1);
-        mmrqB.setMd5C(2);
-        mmrqB.setMd5D(3);
-        mmrqB.setPriority(1);
-        gocB.setMreq(mmrqB);
+
 
         byte[] os = gocB.build().toByteArray();
 
@@ -209,26 +195,60 @@ class myTask extends AsyncTask<Void, Void, Void> {
     }
 
 
-    public void parseProto(byte[] incoming) throws InvalidProtocolBufferException {
+    public int parseProto(byte[] incoming) throws InvalidProtocolBufferException {
 
 
-        Log.i("byte", bytesToHex(incoming));
+       // Log.i("byte", bytesToHex(incoming));
 
 
 
         GenericOuterClass.Generic input = GenericOuterClass.Generic.parseFrom(incoming);
         int gotmid = input.getMid();
-        Log.i("MID", String.valueOf(gotmid));
-        GenericOuterClass.SREP statusReport = GenericOuterClass.SREP.parseFrom(input.toByteArray());
+        //Log.i("MID", String.valueOf(gotmid));
+        //Log.i("hasSrep", String.valueOf(input.hasSrep()));
+        GenericOuterClass.SREP srep = input.getSrep();
+
 
         //statusReport.g
-        Log.i("gotready", String.valueOf(statusReport.getReady()) + String.valueOf(statusReport.getBusy()));
-
-
+       // Log.i("gotready", String.valueOf(srep.getReady()) + String.valueOf(srep.getBusy()));
+        int statusOK = 0;
+        if (srep.getReady()){
+            statusOK = 1;
+            if (srep.getBusy()){
+                statusOK = 2;
+            }
+        }
+        Log.i("Generic device status", String.valueOf(statusOK));
+        return statusOK;
     }
 
 
+    public byte[] makeCreq() {
 
+        GenericOuterClass.Generic.Builder gocB = GenericOuterClass.Generic.newBuilder();
+
+        gocB.getDefaultInstanceForType();
+        gocB.setMid(1398292803);
+        GenericOuterClass.CREQ.Builder creq = GenericOuterClass.CREQ.newBuilder();
+        creq.getDefaultInstanceForType();
+        gocB.setCreq(creq);
+
+        byte[] creqpacket = gocB.build().toByteArray();
+        return creqpacket;
+
+    }
+
+    public void parseCrep(byte[] incoming) throws InvalidProtocolBufferException {
+        GenericOuterClass.Generic input = GenericOuterClass.Generic.parseFrom(incoming);
+        if (input.hasCrep()){
+            GenericOuterClass.CREP crep = input.getCrep();
+            Axs.CREP AxsCrep =  crep.getAxs();
+           Log.i("AXS.Crep XPL & YPL", String.valueOf(AxsCrep.getXpositionLoop())+ "\t" + String.valueOf(AxsCrep.getYpositionLoop()));
+
+
+        }
+
+    }
 }
 
     private final static char[] hexArray = "0123456789ABCDEF".toCharArray();
