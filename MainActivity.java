@@ -31,15 +31,30 @@ import java.net.ServerSocket;
 import java.net.Socket;
 import java.net.SocketException;
 import java.net.UnknownHostException;
+import java.security.MessageDigest;
+import java.security.NoSuchAlgorithmException;
 import java.util.ArrayList;
+import java.util.Arrays;
 import java.util.Collections;
 import java.util.List;
 import Linkos.RTC.Message.AXS.Axs;
 import Linkos.RTC.Message.GenericOuterClass;
+import Linkos.RTC.Message.Range;
 
 
 public class MainActivity extends AppCompatActivity {
-
+boolean xPosLoop;
+boolean yPosLoop;
+double xposmin;
+    double xposmax;
+    double yposmin;
+    double yposmax;
+    double curXpos;
+    double curYpos;
+    double xspdmax;
+    double yspdmax;
+    List <Integer> dataList;
+    boolean send;
    private static Socket s;
     private static ServerSocket ss;
     private static InputStreamReader isr;
@@ -54,7 +69,9 @@ public class MainActivity extends AppCompatActivity {
     @Override
     protected void onCreate(Bundle savedInstanceState) {
         super.onCreate(savedInstanceState);
+        send = true;
         setContentView(R.layout.activity_main);
+        dataList = new ArrayList<>();
         ConnectivityManager cm = (ConnectivityManager) getSystemService(this.CONNECTIVITY_SERVICE);
         NetworkInfo nw = null;
         if (cm != null) {
@@ -83,19 +100,40 @@ public class MainActivity extends AppCompatActivity {
         final Thread mthr = new Thread(new Runnable() {
             @Override
             public void run() {
-                while (true) {
+                while (send) {
                     try {
                         mt.send(dss, ip, mt.makeProto());
-                        //mt.recieveUDP();
-                        switch (mt.parseProto(mt.recieveUDP())){
-                            case 1: Log.w("Connection", "Device is busy");
-                            priority = 1;
-                            break;
-                            case 2: mt.send(dss, ip, mt.makeCreq());
+                        mt.recieveUDP();
+                       // switch (mt.parseProto(mt.recieveUDP())){
+                         //   case 1: //Log.w("Connection", "Device is busy");
+                           // priority = 1;
+                            mt.send(dss, ip, mt.makeCreq());
                             mt.parseCrep(mt.recieveUDP());
-                        }
+                            mt.send(dss, ip, mt.makeSreq());
+                            mt.parseSrep(mt.recieveUDP());
+                            mt.send(dss,ip,mt.makeMreq());
+                            mt.parseMrep(mt.recieveUDP());
+
+                           // mt.parseSrep(mt.recieveUDP());
+                           // send = false;
+                           // break;
+
+                           /* case 2:  // Log.w("Connection", "Device is busy");
+                                priority = 1;
+                                mt.send(dss, ip, mt.makeCreq());
+                                mt.parseCrep(mt.recieveUDP());
+                                mt.send(dss, ip, mt.makeSreq());
+                                mt.parseSrep(mt.recieveUDP());
+                                mt.parseSrep(mt.recieveUDP());
+                                mt.send(dss,ip,mt.makeMreq());
+                              //  mt.parseSrep(mt.recieveUDP());
+                                //send = false;
+                             //   break;
+                        }*/
 
                     } catch (IOException e) {
+                        e.printStackTrace();
+                    } catch (NoSuchAlgorithmException e) {
                         e.printStackTrace();
                     }
                     try {
@@ -218,7 +256,7 @@ class myTask extends AsyncTask<Void, Void, Void> {
                 statusOK = 2;
             }
         }
-        Log.i("Generic device status", String.valueOf(statusOK));
+      //  Log.i("Generic device status", String.valueOf(statusOK));
         return statusOK;
     }
 
@@ -238,14 +276,134 @@ class myTask extends AsyncTask<Void, Void, Void> {
 
     }
 
-    public void parseCrep(byte[] incoming) throws InvalidProtocolBufferException {
+    public void parseCrep(byte[] incoming) throws InvalidProtocolBufferException, NoSuchAlgorithmException {
         GenericOuterClass.Generic input = GenericOuterClass.Generic.parseFrom(incoming);
-        if (input.hasCrep()){
+        if (input.hasCrep()) {
             GenericOuterClass.CREP crep = input.getCrep();
-            Axs.CREP AxsCrep =  crep.getAxs();
-           Log.i("AXS.Crep XPL & YPL", String.valueOf(AxsCrep.getXpositionLoop())+ "\t" + String.valueOf(AxsCrep.getYpositionLoop()));
+            Axs.CREP AxsCrep = crep.getAxs();
+
+            xPosLoop = AxsCrep.getXpositionLoop();
+            yPosLoop = AxsCrep.getYpositionLoop();
+            Range.range_d rangex = AxsCrep.getXposition();
+            Range.range_d rangey = AxsCrep.getYposition();
+            Range.range_d spdx = AxsCrep.getXspeed();
+            Range.range_d spdy = AxsCrep.getYspeed();
+            xposmin = rangex.getMin();
+            xposmax = rangex.getMax();
+            yposmin = rangey.getMin();
+            yposmax = rangey.getMax();
+            xspdmax = spdx.getMax();
+            yspdmax = spdy.getMax();
+          //  Log.i("X positions: ", xposmin + "\t" + xposmax);
+           // Log.i("Y positions: ", yposmin + "\t" + yposmax);
+            byte[] hash = MessageDigest.getInstance("MD5").digest(incoming);
+            dataList.clear();
+            for (int i = 0; i < hash.length; i += 4) {
+                int floatBits = hash[i] & 0xFF |
+                        (hash[i + 1] & 0xFF) << 8 |
+                        (hash[i + 2] & 0xFF) << 16 |
+                        (hash[i + 3] & 0xFF) << 24;
+                //float Data = Float.intBitsToFloat(floatBits);
+//int intData = Math.round(Data);
+dataList.add(floatBits);
+
+//checksum  = mt.byteArrayToInt(MessageDigest.getInstance("MD5").digest(incoming));
 
 
+            }
+            //Log.i("Checksum", String.valueOf(dataList.size()));
+
+        }
+    }
+
+    public void parseSrep(byte[] bytes) throws InvalidProtocolBufferException {
+
+
+        GenericOuterClass.Generic input = GenericOuterClass.Generic.parseFrom(bytes);
+        if (input.hasSrep()){
+            GenericOuterClass.SREP srep = input.getSrep();
+            Axs.SREP axsSrep = srep.getAxs();
+
+            curXpos = axsSrep.getXposition();
+            curYpos = axsSrep.getYposition();
+           // Log.i("Status", String.valueOf(input.getMrep().getReady()) +  String.valueOf(input.getMrep().getBusy()));
+            Log.i ("Cur pos:", curXpos + "\t" + curYpos);
+        }
+    }
+
+    public byte[] makeSreq() {
+
+        GenericOuterClass.Generic.Builder gocB = GenericOuterClass.Generic.newBuilder();
+
+        gocB.getDefaultInstanceForType();
+        gocB.setMid(1398292803);
+        GenericOuterClass.SREQ.Builder sreq = GenericOuterClass.SREQ.newBuilder();
+        sreq.getDefaultInstanceForType();
+        gocB.setSreq(sreq);
+
+        byte[] sreqpacket = gocB.build().toByteArray();
+        return sreqpacket;
+
+
+    }
+
+    public byte[] makeMreq()  {
+
+        GenericOuterClass.Generic.Builder gocB = GenericOuterClass.Generic.newBuilder();
+        gocB.getDefaultInstanceForType();
+        gocB.setMid(1398292803);
+        GenericOuterClass.MREQ.Builder mreq = GenericOuterClass.MREQ.newBuilder();
+
+        mreq.setMd5A(dataList.get(0));
+        Log.i("MD5A", String.valueOf(dataList.get(0)));
+        mreq.setMd5B(dataList.get(1));
+        Log.i("MD5B", String.valueOf(dataList.get(1)));
+        mreq.setMd5C(dataList.get(2));
+        Log.i("MD5C", String.valueOf(dataList.get(2)));
+        mreq.setMd5D(dataList.get(3));
+        Log.i("MD5D", String.valueOf(dataList.get(3)));
+        mreq.setPriority(0);
+
+
+        Axs.MREQ.Builder axsMreq = Axs.MREQ.newBuilder();
+       // axsMreq.setXposition(0);
+        axsMreq.setXspeed(xspdmax/10);
+       // axsMreq.setYposition(0);
+        axsMreq.setYspeed(0);
+        //axsMreq.build();
+        mreq.setAxs(axsMreq.build());
+        gocB.setMreq(mreq.build());
+       byte[] mreqpacket = gocB.build().toByteArray();
+        return mreqpacket;
+
+    }
+
+
+
+
+
+    public int byteArrayToInt(byte[] b)
+    {
+        return   b[3] & 0xFF |
+                (b[2] & 0xFF) << 8 |
+                (b[1] & 0xFF) << 16 |
+                (b[0] & 0xFF) << 24;
+    }
+
+    public void parseMrep(byte[] bytes) throws InvalidProtocolBufferException {
+
+
+
+        GenericOuterClass.Generic input = GenericOuterClass.Generic.parseFrom(bytes);
+        if (input.hasMrep()){
+            GenericOuterClass.SREP mrep = input.getMrep();
+
+
+            // Log.i("Status", String.valueOf(input.getMrep().getReady()) +  String.valueOf(input.getMrep().getBusy()));
+            Log.i ("Status:", String.valueOf(mrep.getReady()) + "\t" + String.valueOf(mrep.getBusy()));
+        }
+        else {
+            Log.i ("Status:", "No mrep");
         }
 
     }
