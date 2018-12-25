@@ -1,14 +1,20 @@
 package ru.linkos.wifi_connector;
 
+import android.annotation.SuppressLint;
 import android.content.Context;
+import android.content.Intent;
 import android.net.ConnectivityManager;
 import android.net.NetworkInfo;
 import android.os.AsyncTask;
+import android.os.Handler;
 import android.support.design.widget.TextInputLayout;
 import android.support.v7.app.AppCompatActivity;
 import android.os.Bundle;
+import android.text.Layout;
 import android.util.Log;
+import android.view.MotionEvent;
 import android.view.View;
+import android.widget.Button;
 import android.widget.TextView;
 import android.widget.Toast;
 
@@ -55,6 +61,9 @@ double xposmin;
     double yspdmax;
     List <Integer> dataList;
     boolean send;
+    boolean targetspeedx;
+    boolean targetspeedy;
+    boolean targetpositivity;
    private static Socket s;
     private static ServerSocket ss;
     private static InputStreamReader isr;
@@ -64,6 +73,7 @@ double xposmin;
     int priority = 5;
     String message = "gui";
     private static String ip = "10.1.7.230";
+    int stationport;
     myTask mt = new myTask();
     DatagramSocket dss;
     @Override
@@ -91,12 +101,16 @@ double xposmin;
 
 
 
+    @SuppressLint({"ClickableViewAccessibility", "SetTextI18n"})
     public void checkWifi(View view){
 
-        final TextInputLayout tw = findViewById(R.id.textInputLayout);
-        final String ip = tw.getEditText().getText().toString();
-
-
+        targetspeedx = false;
+        targetspeedy = false;
+        targetpositivity = false;
+        View starter = findViewById(R.id.startingLayour);
+        starter.setVisibility(View.INVISIBLE);
+        View controls = findViewById(R.id.buttonLayout);
+        controls.setVisibility(View.VISIBLE);
         final Thread mthr = new Thread(new Runnable() {
             @Override
             public void run() {
@@ -104,32 +118,16 @@ double xposmin;
                     try {
                         mt.send(dss, ip, mt.makeProto());
                         mt.recieveUDP();
-                       // switch (mt.parseProto(mt.recieveUDP())){
-                         //   case 1: //Log.w("Connection", "Device is busy");
-                           // priority = 1;
+
                             mt.send(dss, ip, mt.makeCreq());
                             mt.parseCrep(mt.recieveUDP());
                             mt.send(dss, ip, mt.makeSreq());
                             mt.parseSrep(mt.recieveUDP());
-                            mt.send(dss,ip,mt.makeMreq());
+                            Log.i("But", String.valueOf(targetpositivity) + String.valueOf(targetspeedx) + String.valueOf(targetspeedy));
+                            mt.send(dss,ip,mt.makeMreq(2, targetspeedx, targetspeedy, targetpositivity));
                             mt.parseMrep(mt.recieveUDP());
 
-                           // mt.parseSrep(mt.recieveUDP());
-                           // send = false;
-                           // break;
 
-                           /* case 2:  // Log.w("Connection", "Device is busy");
-                                priority = 1;
-                                mt.send(dss, ip, mt.makeCreq());
-                                mt.parseCrep(mt.recieveUDP());
-                                mt.send(dss, ip, mt.makeSreq());
-                                mt.parseSrep(mt.recieveUDP());
-                                mt.parseSrep(mt.recieveUDP());
-                                mt.send(dss,ip,mt.makeMreq());
-                              //  mt.parseSrep(mt.recieveUDP());
-                                //send = false;
-                             //   break;
-                        }*/
 
                     } catch (IOException e) {
                         e.printStackTrace();
@@ -147,10 +145,103 @@ double xposmin;
         });
         mthr.setDaemon(true);
         mthr.start();
+        final TextView curPosit = findViewById(R.id.curPositions);
+
+        final Handler switchHandler = new Handler();
+        final Runnable runnable = new Runnable() {
+
+            public void run() {
+                curPosit.setText("X: " + String.valueOf(curXpos) + "\n" + "Y:" + String.valueOf(curYpos));
+                        switchHandler.postDelayed(this, 1000);}
+
+        };
+        switchHandler.removeCallbacks(runnable);
+        switchHandler.postDelayed(runnable, 1000);
 
 
 
 
+
+        Button up = findViewById(R.id.upButton);
+        Button right = findViewById(R.id.rightButton);
+        Button down = findViewById(R.id.downButton);
+        Button left = findViewById(R.id.leftButton);
+
+        up.setOnTouchListener(new View.OnTouchListener() {
+            @Override
+            public boolean onTouch(View v, MotionEvent event) {
+                switch(event.getAction()) {
+                    case MotionEvent.ACTION_DOWN:
+                        // PRESSED
+                        targetspeedy = true;
+                        targetpositivity = false;
+
+                        return true; // if you want to handle the touch event
+                    case MotionEvent.ACTION_UP:
+                        // RELEASED
+                        targetspeedy = false;
+
+                        return true; // if you want to handle the touch event
+                }
+                return false;
+            }
+        });
+        down.setOnTouchListener(new View.OnTouchListener() {
+            @Override
+            public boolean onTouch(View v, MotionEvent event) {
+                switch(event.getAction()) {
+                    case MotionEvent.ACTION_DOWN:
+                        // PRESSED
+                        targetspeedy = true;
+                        targetpositivity = true;
+                        return true; // if you want to handle the touch event
+                    case MotionEvent.ACTION_UP:
+                        // RELEASED
+                        targetspeedy = false;
+                        return true; // if you want to handle the touch event
+                }
+                return false;
+            }
+        });
+        left.setOnTouchListener(new View.OnTouchListener() {
+            @Override
+            public boolean onTouch(View v, MotionEvent event) {
+                switch(event.getAction()) {
+                    case MotionEvent.ACTION_DOWN:
+                        // PRESSED
+                        targetspeedx = true;
+                        targetpositivity = false;
+                        return true; // if you want to handle the touch event
+                    case MotionEvent.ACTION_UP:
+                        // RELEASED
+                        targetspeedx = false;
+                        return true; // if you want to handle the touch event
+                }
+                return false;
+            }
+        });
+        right.setOnTouchListener(new View.OnTouchListener() {
+            @Override
+            public boolean onTouch(View v, MotionEvent event) {
+                switch(event.getAction()) {
+                    case MotionEvent.ACTION_DOWN:
+                        // PRESSED
+                        targetspeedx = true;
+                        targetpositivity = true;
+                        return true; // if you want to handle the touch event
+                    case MotionEvent.ACTION_UP:
+                        // RELEASED
+                        targetspeedx = false;
+                        return true; // if you want to handle the touch event
+                }
+                return false;
+            }
+        });
+
+
+        /*while (true) {
+
+        }*/
 
 
     }
@@ -162,10 +253,10 @@ class myTask extends AsyncTask<Void, Void, Void> {
 
         return null;
     }
-    public DatagramSocket connect(){
+    public DatagramSocket connect(String targetPort){
 
         try {
-            dss = new DatagramSocket(40050);
+            dss = new DatagramSocket(Integer.decode(targetPort));
         } catch (SocketException e) {
             e.printStackTrace();
         }
@@ -191,14 +282,14 @@ class myTask extends AsyncTask<Void, Void, Void> {
 
 
                 dss.receive(rdp);
-              //  Log.i("rdplength", String.valueOf(rdp.getLength()));
+
 
                 byte[] data = rdp.getData();
                 byte[] dataout = new byte [rdp.getLength()];
                 System.arraycopy(data, 0, dataout, 0, rdp.getLength());
 
 
-              //  Log.i("datalength", String.valueOf(data.length));
+
 
                 return dataout;
 
@@ -236,19 +327,17 @@ class myTask extends AsyncTask<Void, Void, Void> {
     public int parseProto(byte[] incoming) throws InvalidProtocolBufferException {
 
 
-       // Log.i("byte", bytesToHex(incoming));
+
 
 
 
         GenericOuterClass.Generic input = GenericOuterClass.Generic.parseFrom(incoming);
         int gotmid = input.getMid();
-        //Log.i("MID", String.valueOf(gotmid));
-        //Log.i("hasSrep", String.valueOf(input.hasSrep()));
+
         GenericOuterClass.SREP srep = input.getSrep();
 
 
-        //statusReport.g
-       // Log.i("gotready", String.valueOf(srep.getReady()) + String.valueOf(srep.getBusy()));
+
         int statusOK = 0;
         if (srep.getReady()){
             statusOK = 1;
@@ -256,7 +345,7 @@ class myTask extends AsyncTask<Void, Void, Void> {
                 statusOK = 2;
             }
         }
-      //  Log.i("Generic device status", String.valueOf(statusOK));
+
         return statusOK;
     }
 
@@ -294,8 +383,7 @@ class myTask extends AsyncTask<Void, Void, Void> {
             yposmax = rangey.getMax();
             xspdmax = spdx.getMax();
             yspdmax = spdy.getMax();
-          //  Log.i("X positions: ", xposmin + "\t" + xposmax);
-           // Log.i("Y positions: ", yposmin + "\t" + yposmax);
+
             byte[] hash = MessageDigest.getInstance("MD5").digest(incoming);
             dataList.clear();
             for (int i = 0; i < hash.length; i += 4) {
@@ -303,15 +391,14 @@ class myTask extends AsyncTask<Void, Void, Void> {
                         (hash[i + 1] & 0xFF) << 8 |
                         (hash[i + 2] & 0xFF) << 16 |
                         (hash[i + 3] & 0xFF) << 24;
-                //float Data = Float.intBitsToFloat(floatBits);
-//int intData = Math.round(Data);
+
 dataList.add(floatBits);
 
-//checksum  = mt.byteArrayToInt(MessageDigest.getInstance("MD5").digest(incoming));
+
 
 
             }
-            //Log.i("Checksum", String.valueOf(dataList.size()));
+
 
         }
     }
@@ -326,7 +413,7 @@ dataList.add(floatBits);
 
             curXpos = axsSrep.getXposition();
             curYpos = axsSrep.getYposition();
-           // Log.i("Status", String.valueOf(input.getMrep().getReady()) +  String.valueOf(input.getMrep().getBusy()));
+
             Log.i ("Cur pos:", curXpos + "\t" + curYpos);
         }
     }
@@ -347,7 +434,7 @@ dataList.add(floatBits);
 
     }
 
-    public byte[] makeMreq()  {
+    public byte[] makeMreq(int Kspeed, boolean x, boolean y, boolean up)  {
 
         GenericOuterClass.Generic.Builder gocB = GenericOuterClass.Generic.newBuilder();
         gocB.getDefaultInstanceForType();
@@ -355,26 +442,45 @@ dataList.add(floatBits);
         GenericOuterClass.MREQ.Builder mreq = GenericOuterClass.MREQ.newBuilder();
 
         mreq.setMd5A(dataList.get(0));
-        Log.i("MD5A", String.valueOf(dataList.get(0)));
+       // Log.i("MD5A", String.valueOf(dataList.get(0)));
         mreq.setMd5B(dataList.get(1));
-        Log.i("MD5B", String.valueOf(dataList.get(1)));
+        //Log.i("MD5B", String.valueOf(dataList.get(1)));
         mreq.setMd5C(dataList.get(2));
-        Log.i("MD5C", String.valueOf(dataList.get(2)));
+        //Log.i("MD5C", String.valueOf(dataList.get(2)));
         mreq.setMd5D(dataList.get(3));
-        Log.i("MD5D", String.valueOf(dataList.get(3)));
+        //Log.i("MD5D", String.valueOf(dataList.get(3)));
         mreq.setPriority(0);
 
 
         Axs.MREQ.Builder axsMreq = Axs.MREQ.newBuilder();
-       // axsMreq.setXposition(0);
-        axsMreq.setXspeed(xspdmax/10);
-       // axsMreq.setYposition(0);
-        axsMreq.setYspeed(0);
-        //axsMreq.build();
+        double xpseed = xspdmax / Kspeed;
+        double yspeed = yspdmax / Kspeed;
+        if (x){
+            if (up){
+                axsMreq.setXspeed(xpseed);
+            }
+            else {
+                axsMreq.setXspeed(-xpseed);
+            }
+        }
+        else {
+            axsMreq.setXspeed(0);
+        }
+        if (y){
+            if (up){
+                axsMreq.setYspeed(yspeed);
+            }
+            else {
+                axsMreq.setYspeed(-yspeed);
+            }
+        }
+        else {
+            axsMreq.setYspeed(0);
+        }
+
         mreq.setAxs(axsMreq.build());
         gocB.setMreq(mreq.build());
-       byte[] mreqpacket = gocB.build().toByteArray();
-        return mreqpacket;
+        return gocB.build().toByteArray();
 
     }
 
@@ -400,7 +506,7 @@ dataList.add(floatBits);
 
 
             // Log.i("Status", String.valueOf(input.getMrep().getReady()) +  String.valueOf(input.getMrep().getBusy()));
-            Log.i ("Status:", String.valueOf(mrep.getReady()) + "\t" + String.valueOf(mrep.getBusy()));
+          //  Log.i ("Status:", String.valueOf(mrep.getReady()) + "\t" + String.valueOf(mrep.getBusy()));
         }
         else {
             Log.i ("Status:", "No mrep");
@@ -421,7 +527,11 @@ dataList.add(floatBits);
     }
 public void setConnection(View view){
 
-    dss =  mt.connect();
+        TextInputLayout portInput = findViewById(R.id.portInput);
+        TextInputLayout ipInput = findViewById(R.id.textInputLayout);
+        ip = ipInput.getEditText().getText().toString();
+
+    dss =  mt.connect(portInput.getEditText().getText().toString());
 
 
 }
